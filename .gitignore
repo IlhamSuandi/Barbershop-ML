@@ -1,0 +1,7 @@
+# pretrained model which is to huge to store in github
+pretrained_models/*
+
+# Byte-compiled / optimized / DLL files
+*/__pycache__/
+*.py[cod]
+*$py.class
