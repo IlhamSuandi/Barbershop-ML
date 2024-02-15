@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from utils.bicubic import BicubicDownSample
+
 from .resnet import Resnet18
 # from modules.bn import InPlaceABNSync as BatchNorm2d
 
@@ -15,7 +15,7 @@ import numpy as np
 seg_mean = torch.from_numpy(np.array([[0.485, 0.456, 0.406]])).float().cuda().reshape(1,3,1,1)
 seg_std = torch.from_numpy(np.array([[0.229, 0.224, 0.225]])).float().cuda().reshape(1,3,1,1)
 seg_criterion = nn.CrossEntropyLoss()
-downsample = BicubicDownSample(factor=1024 // 512)
+
 
 class ConvBNReLU(nn.Module):
     def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1, *args, **kwargs):
@@ -240,24 +240,24 @@ class BiSeNet(nn.Module):
         ## here self.sp is deleted
         self.ffm = FeatureFusionModule(256, 256)
         self.conv_out = BiSeNetOutput(256, 256, n_classes)
-        # self.conv_out16 = BiSeNetOutput(128, 64, n_classes)
-        # self.conv_out32 = BiSeNetOutput(128, 64, n_classes)
+        self.conv_out16 = BiSeNetOutput(128, 64, n_classes)
+        self.conv_out32 = BiSeNetOutput(128, 64, n_classes)
         self.init_weight()
-        self.magnify = torch.nn.AdaptiveAvgPool2d((1024, 1024))
 
     def forward(self, x):
-        x = (downsample(((x + 1) / 2)) - seg_mean) / seg_std
         H, W = x.size()[2:]
         feat_res8, feat_cp8, feat_cp16 = self.cp(x)  # here return res3b1 feature
         feat_sp = feat_res8  # use res3b1 feature to replace spatial path feature
         feat_fuse = self.ffm(feat_sp, feat_cp8)
+
         feat_out = self.conv_out(feat_fuse)
-        # feat_out16 = self.conv_out16(feat_cp8)
-        # feat_out32 = self.conv_out32(feat_cp16)
+        feat_out16 = self.conv_out16(feat_cp8)
+        feat_out32 = self.conv_out32(feat_cp16)
+
         feat_out = F.interpolate(feat_out, (H, W), mode='bilinear', align_corners=True)
-        # feat_out16 = F.interpolate(feat_out16, (H, W), mode='bilinear', align_corners=True)
-        # feat_out32 = F.interpolate(feat_out32, (H, W), mode='bilinear', align_corners=True)
-        return self.magnify(feat_out), feat_out
+        feat_out16 = F.interpolate(feat_out16, (H, W), mode='bilinear', align_corners=True)
+        feat_out32 = F.interpolate(feat_out32, (H, W), mode='bilinear', align_corners=True)
+        return feat_out, feat_out16, feat_out32
 
     def init_weight(self):
         for ly in self.children():
